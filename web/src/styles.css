@@ -661,10 +661,12 @@ button:disabled {
   backdrop-filter: blur(10px);
 }
 
-.session-card:hover {
+.session-card:hover,
+.session-card:focus-visible {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: var(--primary-300);
+  outline: none;
 }
 
 .session-card.active {
@@ -738,6 +740,56 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-height: min(72dvh, 960px);
+}
+
+.detail-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.detail-header h2 {
+  margin-bottom: var(--space-1);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: min(100%, 440px);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-2xl);
+  padding: var(--space-6);
+}
+
+.modal-card h2 {
+  margin-bottom: var(--space-3);
+}
+
+.modal-card .subtle {
+  margin-top: var(--space-2);
+  word-break: break-all;
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }
 
 .message {
@@ -840,6 +892,17 @@ button:disabled {
   grid-template-columns: 1fr auto;
   gap: var(--space-3);
   align-items: end;
+  position: sticky;
+  bottom: var(--space-3);
+  z-index: var(--z-sticky);
+  padding: var(--space-3);
+  margin-left: calc(var(--space-3) * -1);
+  margin-right: calc(var(--space-3) * -1);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 /* Help Section */
@@ -927,6 +990,7 @@ button:disabled {
   
   .composer {
     grid-template-columns: 1fr;
+    bottom: var(--space-2);
   }
   
   .inline-actions {
@@ -1071,6 +1135,21 @@ button:disabled {
   .inline-actions button {
     min-height: 44px;
     padding: var(--space-2) var(--space-3);
+    flex: 1 1 120px;
+  }
+
+  .detail-topbar,
+  .modal-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modal-card {
+    padding: var(--space-4);
   }
   
   /* Mobile-friendly help content */

@@ -112,8 +112,10 @@ function App() {
   const [busySending, setBusySending] = useState(false)
   const [loadingSessionID, setLoadingSessionID] = useState<string | null>(null)
   const [testingConnection, setTestingConnection] = useState(false)
+  const [creatingSession, setCreatingSession] = useState(false)
   const [settingsNotice, setSettingsNotice] = useState<{ type: NoticeType; text: string } | null>(null)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
+  const [sessionToDelete, setSessionToDelete] = useState<SessionView | null>(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const completionAudioRef = useRef<HTMLAudioElement | null>(null)
   const wasRunningRef = useRef(false)
@@ -171,7 +173,10 @@ function App() {
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Connection timed out")), 12000))
       ])
       setConnectedVersion(health.version)
-      setSettingsNotice({ type: "success", text: `Connected to OpenCode ${health.version}` })
+      setConfig(configToTest)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(configToTest))
+      setView("sessions")
+      setSettingsNotice({ type: "success", text: `Connected to OpenCode ${health.version}. Configuration saved.` })
     } catch (err) {
       setSettingsNotice({ type: "error", text: `Connection failed: ${(err as Error).message}` })
     } finally {
@@ -180,7 +185,7 @@ function App() {
   }
 
   async function refreshSessions(silent = false) {
-    if (!config.host || !config.password) return
+    if (!config.host || config.port <= 0) return
     if (!silent) setRuntimeError(null)
     try {
       const [items, statuses] = await Promise.all([api.listSessions(config), api.listStatuses(config)])
@@ -203,7 +208,7 @@ function App() {
   }
 
   async function loadCommands() {
-    if (!config.host || !config.password) return
+    if (!config.host || config.port <= 0) return
     try {
       const list = await api.listCommands(config)
       setCommands(list)
@@ -227,13 +232,19 @@ function App() {
   }
 
   async function createSession() {
+    if (creatingSession) return
+    setCreatingSession(true)
+    setRuntimeError(null)
     try {
       const created = await api.createSession(config, "Mobile session")
       await refreshSessions()
       setSelectedID(created.id)
+      setView("detail")
       await loadSelected(created.id, created.directory)
     } catch (err) {
       setRuntimeError((err as Error).message)
+    } finally {
+      setCreatingSession(false)
     }
   }
 
@@ -273,6 +284,7 @@ function App() {
         setTodos([])
         setView("sessions")
       }
+      setSessionToDelete(null)
       await refreshSessions(true)
     } catch (err) {
       setRuntimeError((err as Error).message)
@@ -291,7 +303,7 @@ function App() {
   }
 
   useEffect(() => {
-    if (!config.host || !config.password) return
+    if (!config.host || config.port <= 0) return
     refreshSessions(true).catch(() => undefined)
     loadCommands().catch(() => undefined)
     const timer = setInterval(() => {
@@ -301,7 +313,7 @@ function App() {
       }
     }, 3500)
     return () => clearInterval(timer)
-  }, [config.host, config.password, selectedSession?.id])
+  }, [config.host, config.port, config.password, selectedSession?.id])
 
   useEffect(() => {
     if (!hasConfiguredServer) {
@@ -488,7 +500,7 @@ function App() {
               type="password"
               value={draftConfig.password}
               onChange={(event) => setDraftConfig({ ...draftConfig, password: event.target.value })}
-              placeholder="Your server password"
+              placeholder="Optional; leave blank for unsecured local server"
             />
           </label>
           
@@ -543,9 +555,13 @@ function App() {
           <div className="header-row">
             <h2>Sessions</h2>
             <div className="inline-actions">
-              <button onClick={createSession} className="btn-primary">
-                <PlusIcon size={18} />
-                New Session
+              <button onClick={() => refreshSessions()} className="btn-secondary">
+                <LoadingIcon size={18} />
+                Refresh
+              </button>
+              <button onClick={createSession} className="btn-primary" disabled={creatingSession}>
+                {creatingSession ? <LoadingIcon size={18} /> : <PlusIcon size={18} />}
+                {creatingSession ? "Creating..." : "New Session"}
               </button>
             </div>
           </div>
@@ -569,6 +585,15 @@ function App() {
                 <article 
                   key={session.id} 
                   className={`session-card ${selectedID === session.id ? "active" : ""} fade-in`}
+                  onClick={() => openSession(session.id, session.directory).catch(() => undefined)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      openSession(session.id, session.directory).catch(() => undefined)
+                    }
+                  }}
                 >
                   <div className="header-row">
                     <h3>{session.title}</h3>
@@ -589,7 +614,10 @@ function App() {
                   </div>
                   <div className="inline-actions">
                     <button
-                      onClick={() => openSession(session.id, session.directory).catch(() => undefined)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openSession(session.id, session.directory).catch(() => undefined)
+                      }}
                       className="btn-primary"
                     >
                       <PlayIcon size={16} />
@@ -597,7 +625,10 @@ function App() {
                     </button>
                     <button 
                       className="btn-danger" 
-                      onClick={() => deleteSession(session.id)}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        setSessionToDelete(session)
+                      }}
                     >
                       <TrashIcon size={16} />
                       Delete
@@ -614,7 +645,13 @@ function App() {
 
       {view === "detail" && (
         <main className="panel detail fade-in">
-            <div className="header-row">
+          <div className="detail-topbar">
+            <button className="btn-secondary" onClick={() => setView("sessions")}>← Sessions</button>
+            {selectedSession && (
+              <span className={`pill ${selectedSession.status}`}>{selectedSession.status}</span>
+            )}
+          </div>
+          <div className="header-row detail-header">
               <div>
               <h2>
                 {selectedSession ? (
@@ -738,6 +775,33 @@ function App() {
           
           {runtimeError && <div className="error fade-in">✗ {runtimeError}</div>}
         </main>
+      )}
+
+      {sessionToDelete && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSessionToDelete(null)}>
+          <section
+            className="modal-card fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-session-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="delete-session-title">Delete session?</h2>
+            <p>
+              This will permanently delete <strong>{sessionToDelete.title}</strong>.
+            </p>
+            <p className="subtle">{sessionToDelete.directory}</p>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setSessionToDelete(null)}>
+                Cancel
+              </button>
+              <button className="btn-danger" onClick={() => deleteSession(sessionToDelete.id)}>
+                <TrashIcon size={16} />
+                Delete session
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {view === "help" && (
