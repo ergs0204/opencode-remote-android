@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { api } from "./api"
 import { createTranslator, languageOptions, normalizeLanguage, type LanguageCode } from "./i18n"
-import type { CommandInfo, DiffFile, FileEntry, FileStatusEntry, MessageEnvelope, ModelOption, ModelSelection, ProjectDashboard, ServerConfig, SessionView, TodoItem } from "./types"
+import type { CommandInfo, DiffFile, FileEntry, FileStatusEntry, MessageEnvelope, ModelOption, ModelSelection, ProjectDashboard, ServerConfig, Session, SessionStatus, SessionView, TodoItem } from "./types"
 import {
   SettingsIcon,
   FolderIcon,
@@ -106,6 +106,20 @@ function modelSearchText(option: ModelOption): string {
 function normalizeDirectory(value: string): string | undefined {
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+function mapSessionView(session: Session, status: SessionStatus | undefined): SessionView {
+  return {
+    id: session.id,
+    title: session.title,
+    directory: session.directory,
+    updated: session.time.updated,
+    status: status?.type ?? "idle",
+    files: session.summary?.files ?? 0,
+    additions: session.summary?.additions ?? 0,
+    deletions: session.summary?.deletions ?? 0,
+    model: session.model ? { providerID: session.model.providerID, modelID: session.model.id, variant: session.model.variant } : undefined
+  }
 }
 
 function formatLimit(value?: number): string {
@@ -403,19 +417,14 @@ function App() {
       setConnectionMessage(t('connection.loadingSessions'))
     }
     try {
-      const [items, statuses] = await Promise.all([api.listSessions(config), api.listStatuses(config)])
+      const items = await api.listGlobalSessions(config).catch(() => api.listSessions(config))
+      const directories = [...new Set(items.map((session) => session.directory).filter(Boolean))]
+      const statusMaps = await Promise.all(
+        directories.map((directory) => api.listStatuses(config, directory).catch(() => ({} as Record<string, SessionStatus>)))
+      )
+      const statuses = Object.assign({}, ...statusMaps)
       const mapped = items
-        .map((session) => ({
-          id: session.id,
-          title: session.title,
-          directory: session.directory,
-          updated: session.time.updated,
-          status: statuses[session.id]?.type ?? "idle",
-          files: session.summary?.files ?? 0,
-          additions: session.summary?.additions ?? 0,
-          deletions: session.summary?.deletions ?? 0,
-          model: session.model ? { providerID: session.model.providerID, modelID: session.model.id, variant: session.model.variant } : undefined
-        }))
+        .map((session) => mapSessionView(session, statuses[session.id]))
         .sort((a, b) => b.updated - a.updated)
       setSessions(mapped)
       backgroundFailureCountRef.current = 0
@@ -610,6 +619,10 @@ function App() {
       }
       setShowNewSessionPicker(false)
       await refreshSessions()
+      setSessions((current) => {
+        if (current.some((session) => session.id === created.id)) return current
+        return [mapSessionView(created, undefined), ...current]
+      })
       setSelectedID(created.id)
       setView("detail")
       await loadSelected(created.id, created.directory)

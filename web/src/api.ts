@@ -170,6 +170,10 @@ export const api = {
     return request<Session[]>(config, withDirectory("/session", directory))
   },
 
+  listGlobalSessions(config: ServerConfig) {
+    return request<Session[]>(config, "/experimental/session")
+  },
+
   listStatuses(config: ServerConfig, directory?: string) {
     return request<Record<string, SessionStatus>>(config, withDirectory("/session/status", directory))
   },
